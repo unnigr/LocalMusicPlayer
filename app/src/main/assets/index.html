@@ -568,7 +568,7 @@
     <audio id="audio-channel-a" preload="auto"></audio>
     <audio id="audio-channel-b" preload="auto"></audio>
 
-    <div class="control-hub-panel">
+    <div class="control-hub-panel" style="order:3;">
         
         <div class="timer-section">
             <div class="timer-status" id="timer-status">⏱️ SLEEP TIMER OFF</div>
@@ -622,8 +622,11 @@
     <div class="playlist-modal-overlay" id="playlist-overlay">
         <div class="playlist-container">
             <div class="playlist-header-row">
-                <div class="playlist-title">📋 Your Playlist <span class="playlist-count" id="playlist-count">0 tracks</span></div>
-                <button class="close-popup-btn" id="close-playlist-btn">Done ❌</button>
+                <div class="playlist-title-wrap">
+                    <div class="playlist-title">📋 Your Playlist</div>
+                    <div class="playlist-subtitle" id="playlist-count">0 tracks</div>
+                </div>
+                <button class="close-popup-btn" id="close-playlist-btn">Done ✕</button>
             </div>
             <div id="list-wrapper">
                 <div style="color: #666; font-style: italic; padding: 10px; font-size: 13px;">No music imported yet, bro.</div>
@@ -744,6 +747,14 @@
         closePlaylistBtn.addEventListener('click', () => playlistOverlay.classList.remove('open'));
         playlistOverlay.addEventListener('click', (e) => {
             if (e.target === playlistOverlay) playlistOverlay.classList.remove('open');
+        });
+
+        // Android uses the native folder picker; browser fallback keeps the HTML version working.
+        document.querySelector('.folder-label').addEventListener('click', (e) => {
+            if (window.AndroidBridge && AndroidBridge.chooseMusicFolder) {
+                e.preventDefault();
+                AndroidBridge.chooseMusicFolder();
+            }
         });
 
         dirPicker.addEventListener('change', function(e) {
@@ -891,8 +902,8 @@
 
         nextBtn.addEventListener('click', () => {
             if(playlist.length === 0) return;
-            let nextIdx = (currentTrackIndex + 1) % playlist.length;
-            switchTrack(nextIdx);
+            if (currentTrackIndex >= playlist.length - 1) return;
+            switchTrack(currentTrackIndex + 1);
         });
 
         prevBtn.addEventListener('click', () => {
@@ -946,9 +957,19 @@
                     let durS = Math.floor(currentChannel.duration % 60).toString().padStart(2, '0');
                     lblDuration.innerText = `${durM}:${durS}`;
 
-                    if (currentChannel.duration - currentChannel.currentTime <= 0.1 && !isTransitioning) {
-                        let nextIdx = (currentTrackIndex + 1) % playlist.length;
-                        switchTrack(nextIdx);
+                    if (currentChannel.duration - currentChannel.currentTime <= 0.15 && !isTransitioning && playlist.length) {
+                        if (currentTrackIndex < playlist.length - 1) {
+                            switchTrack(currentTrackIndex + 1);
+                        } else {
+                            currentChannel.pause();
+                            currentChannel.currentTime = currentChannel.duration;
+                            isPlaying = false;
+                            uiPlay.style.display = 'block';
+                            uiPause.style.display = 'none';
+                            vinylDisc.style.animationPlayState = 'paused';
+                            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+                            highlightActiveTrack();
+                        }
                     }
                 }
             };
@@ -1026,8 +1047,7 @@
                     switchTrack(prevIdx);
                 });
                 navigator.mediaSession.setActionHandler('nexttrack', () => {
-                    let nextIdx = (currentTrackIndex + 1) % playlist.length;
-                    switchTrack(nextIdx);
+                    if (currentTrackIndex < playlist.length - 1) switchTrack(currentTrackIndex + 1);
                 });
             }
         }
